@@ -18,7 +18,8 @@ begin
 {
     [hashtable]$TranslateTransType = @{
             'Bill Pay' = 'PAYMENT'
-            'Check' = 'PAYMENT'
+            'Check' = 'PAYMENT' # Reusing PAYMENT
+            'Deposit' = 'DEP'
             'Direct Debit' = 'DIRECTDEBIT'
             'Direct Deposit' = 'DIRECTDEP'
             'Interest' = 'INT'
@@ -78,17 +79,6 @@ begin
                                 $NameXML = $NameXML.Substring(0,32)
                             }
 
-                            $TransactionXML += '<STMTTRN>'
-                            $TransactionXML += "<TRNTYPE>$( $TranslateTransType[$_.TransactionType] )"
-                            $TransactionXML += "<DTPOSTED>$( $TransactionDateXML )160000" # Convert MM/DD/YY to 'YYYYMMDD160000'
-                            $TransactionXML += "<TRNAMT>$( $_.Amount -replace '(\-*\d+\.\d\d)\d*', '$1' )" # Remove unnecessary decimal digits
-                            $TransactionXML += "<FITID>$( $FitIDXML )$( $FitID )" # Convert MM/DD/YY to 'YYYYDDMMFitID'
-                            $TransactionXML += "<NAME>$( $NameXML )"
-                            $TransactionXML += "<MEMO>$( $_.TransactionType )-$( $NameXML )"
-                            $TransactionXML += '</STMTTRN>'
-                
-                            $FitID -= 1000
-                
                             if ($DtStartXML.CompareTo( $TransactionDateXML ) -gt 0)
                             {
                                 $DtStartXML = $TransactionDateXML
@@ -99,52 +89,56 @@ begin
                                 $BalAmtXML = $_.Balance -replace '(\-*\d+\.\d\d)\d*', '$1' # Remove unnecessary decimal digits
                             }
                             
-                            $TransactionXML
+                            '<STMTTRN>'
+                            "<TRNTYPE>$( $TranslateTransType[$_.TransactionType] )"
+                            "<DTPOSTED>$( $TransactionDateXML )160000" # Convert MM/DD/YY to 'YYYYMMDD160000'
+                            "<TRNAMT>$( $_.Amount -replace '(\-*\d+\.\d\d)\d*', '$1' )" # Remove unnecessary decimal digits
+                            "<FITID>$( $FitIDXML )$( $FitID )" # Convert MM/DD/YY to 'YYYYDDMMFitID'
+                            "<NAME>$( $NameXML )"
+                            "<MEMO>$( $_.TransactionType )-$( $NameXML )"
+                            '</STMTTRN>'
+                
+                            $FitID -= 1000                
                         }
         }
         end
         {
-            $InStream = New-Object -TypeName System.IO.StreamReader -ArgumentList $TemplateOFXFilePath
+            $InStream = New-Object -TypeName System.IO.StreamReader -ArgumentList (Resolve-Path $TemplateOFXFilePath)
             [string]$InLine = ''
-            [array]$QFXPreamble = @()
-            [array]$QFXPostamble = @()
             while ($null -ne ($InLine = $InStream.ReadLine()) -and ($InLine -notmatch '<DTSTART>\d+'))
             {
-                $QFXPreamble += $InLine.ToString()
+                $InLine.ToString()
             }
-            $QFXPreamble += "<DTSTART>$( $DtStartXML )040000"
+            "<DTSTART>$( $DtStartXML )040000"
             while ($null -ne ($InLine = $InStream.ReadLine()) -and ($InLine -notmatch '<DTEND>\d+'))
             {
-                $QFXPreamble += $InLine.ToString()
+                $InLine.ToString()
             }
-            $QFXPreamble += "<DTEND>$( $DtEndXML )035959"
+            "<DTEND>$( $DtEndXML )035959"
             while ($null -ne ($InLine = $InStream.ReadLine()) -and ($InLine -notmatch '<STMTTRN>'))
             {
-                $QFXPreamble += $InLine.ToString()
+                $InLine.ToString()
             }
 
             while ($null -ne ($InLine = $InStream.ReadLine()) -and ($InLine -notmatch '</BANKTRANLIST>'))
             { }
+            $TransactionXML
 
-            $QFXPostamble += $InLine
+            $InLine.ToString()
             while ($null -ne ($InLine = $InStream.ReadLine()) -and ($InLine -notmatch '<BALAMT>\d+.\d+'))
             {
-                $QFXPostamble += $InLine.ToString()
+                $InLine.ToString()
             }
-            $QFXPostamble += "<BALAMT>$BalAmtXML"
+            "<BALAMT>$BalAmtXML"
             while ($null -ne ($InLine = $InStream.ReadLine()) -and ($InLine -notmatch '<DTASOF>\d+'))
             {
-                $QFXPostamble += $InLine.ToString()
+                $InLine.ToString()
             }
-            $QFXPostamble += "<DTASOF>$( $DtEndXML )040000"
-            while ($null -ne ($InLine = $InStream.ReadLine()))
+            "<DTASOF>$( $DtEndXML )040000"
+            while (-not $InStream.EndOfStream -and $null -ne ($InLine = $InStream.ReadLine()))
             {
-                $QFXPostamble += $InLine.ToString()
+                $InLine.ToString()
             }
-
-            $QFXPreamble += $TransactionXML
-            $QFXPreamble += $QFXPostamble
-            $QFXPreamble
         }
     }
 }
